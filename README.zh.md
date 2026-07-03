@@ -148,11 +148,28 @@ DeepSeek 定价约 ¥0.001/千 token，**每次"开会"不到 1 分钱**。
 
 ## 🔌 兼容性
 
-**当前仅支持 Reasonix 0.53**（桌面会话格式）。会话扫描器读取 Reasonix 原生的 `desktop-*.jsonl` 文件及对应的 `.meta.json` 元数据。
+**同时支持 Reasonix v0.53 和 v1.X（Go 重写版）**。council.py 启动时自动检测会话存储格式并采用对应的解析策略。
+
+### v0.53 格式
+
+- 会话文件：`desktop-YYYYMMDDHHMM-N.jsonl`
+- 元数据：`desktop-YYYYMMDDHHMM-N.meta.json`（含 `summary`、`totalCostUsd` 等）
+- 数据目录：`{reasonix_home}/.reasonix/sessions/`
+
+### v1.X 格式（Go 重写版）
+
+- 会话文件：`YYYYMMDD-HHMMSS-model.jsonl` 或 `*.events.jsonl`
+- 元数据：`*.meta`（BranchMeta JSON，含 `Preview`、`Turns`、`Scope` 等）
+- 数据目录：`%APPDATA%/reasonix/sessions/`（Windows）或 `~/.reasonix/sessions/`（macOS/Linux）
+- 支持 `REASONIX_HOME` 环境变量覆盖
+
+### 自动检测
+
+无需手动指定版本。`scan` 命令扫描 sessions 目录中的文件，根据扩展名（`.meta` vs `.meta.json`）自动判断格式。
 
 ### 会话文件格式
 
-会话扫描器读取以下格式的 JSONL 文件：
+两版共用相同的 JSONL 消息格式：
 
 ```jsonl
 {"role":"user","content":"..."}
@@ -163,7 +180,6 @@ DeepSeek 定价约 ¥0.001/千 token，**每次"开会"不到 1 分钱**。
 - 每行一个 JSON 对象（JSONL 格式）
 - 包含标准的 `role` 字段：`user`（用户）、`assistant`（助手）、`tool`（工具调用）
 - 助手消息可携带 `tool_calls` 数组，记录工具调用信息
-- 每个 JSONL 文件配套一个 `.meta.json` 文件，包含 `summary`（对话摘要）和 `workspace`（工作目录）等元数据
 
 ### 扩展到其他 AI Agent 平台
 
@@ -175,7 +191,8 @@ DeepSeek 定价约 ¥0.001/千 token，**每次"开会"不到 1 分钱**。
 
 | 平台 | 适配难度 | 具体做法 |
 |------|:--:|------|
-| Reasonix 0.53 | ✅ 内置 | 无需额外开发 |
+| Reasonix v0.53 | ✅ 内置 | 自动检测，无需额外开发 |
+| Reasonix v1.X (Go) | ✅ 内置 | 自动检测，含 REASONIX_HOME 和 APPDATA 感知 |
 | ChatGPT 导出 | 低 | 解析 `conversations.json`，提取 `role` + `content` |
 | Claude 导出 | 低 | 解析 Claude 的 JSON 导出格式 |
 | LibreChat | 中 | 读取 MongoDB 中的对话文档 |
