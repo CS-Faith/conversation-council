@@ -74,9 +74,9 @@ Reasonix Session Files (.jsonl)
 
 ### Prerequisites
 
-- [Reasonix](https://github.com/CS-Faith/reasonix-portakit) (with session history)
-- Python 3.10+ (included in Reasonix portable)
-- DeepSeek API key (for LLM calls)
+- [Reasonix](https://github.com/CS-Faith/reasonix-portakit) v0.53 or v1.X (with session history)
+- Python 3.10+ (built into Reasonix v0.53 portable; must be installed separately for v1.X)
+- DeepSeek API key — set as `DEEPSEEK_API_KEY` environment variable
 
 ### Installation
 
@@ -142,7 +142,24 @@ With DeepSeek pricing (~¥0.001/1K tokens), each council discussion costs **less
 
 ## 🔌 Compatibility
 
-**Currently supports Reasonix 0.53** (desktop session format). The session scanner reads Reasonix's `desktop-*.jsonl` files and their corresponding `.meta.json` metadata — this is the native format produced by Reasonix 0.53 desktop sessions.
+**Supports Reasonix v0.53 and v1.X (Go rewrite)** with automatic format detection. The session scanner auto-detects the storage format on startup and applies the correct parsing strategy — no manual configuration needed.
+
+### v0.53 Format
+
+- Session files: `desktop-YYYYMMDDHHMM-N.jsonl`
+- Metadata: `desktop-YYYYMMDDHHMM-N.meta.json` (contains `summary`, `totalCostUsd`, etc.)
+- Data directory: `{reasonix_home}/.reasonix/sessions/`
+
+### v1.X Format (Go Rewrite)
+
+- Session files: `YYYYMMDD-HHMMSS-model.jsonl` or `*.events.jsonl`
+- Metadata: `*.meta` (BranchMeta JSON with `Preview`, `Turns`, `Scope`, etc.)
+- Data directory: `%APPDATA%/reasonix/sessions/` (Windows) or `~/.reasonix/sessions/` (macOS/Linux)
+- Honors `REASONIX_HOME` environment variable
+
+### Auto-Detection
+
+The `scan` command inspects files in the sessions directory and determines the format by extension (`.meta` vs `.meta.json`). The user never needs to specify a version.
 
 ### Format Assumptions
 
@@ -157,7 +174,7 @@ The `read_session_messages()` adapter expects:
 - One JSON object per line (JSONL)
 - Standard `role` field: `user` / `assistant` / `tool`
 - Optional `tool_calls` array on assistant messages
-- Companion `.meta.json` file with `summary` and `workspace` fields
+- Companion metadata file: `.meta.json` (v0.53) or `.meta` (v1.X) with summary/preview fields
 
 ### Extending to Other AI Agents
 
@@ -169,7 +186,8 @@ The core architecture is **platform-agnostic** — the heavy lifting (summary ex
 
 | Platform | Effort | What You Need |
 |----------|:--:|------|
-| Reasonix 0.53 | ✅ Built-in | No extra work needed |
+| Reasonix v0.53 | ✅ Built-in | Auto-detected, no extra work |
+| Reasonix v1.X (Go) | ✅ Built-in | Auto-detected, REASONIX_HOME + APPDATA aware |
 | ChatGPT exports | Low | Parse `conversations.json` to extract `role` + `content` |
 | Claude exports | Low | Parse Claude's JSON export format |
 | LibreChat | Medium | Read conversation documents from MongoDB |
