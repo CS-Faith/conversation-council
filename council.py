@@ -22,14 +22,161 @@ import requests
 from datetime import datetime
 
 # ============================================================
-# 路径配置
+# 路径配置 + 版本自动检测
 # ============================================================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = SCRIPT_DIR
-SESSIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(SKILL_DIR)), "sessions")
 CONFIG_FILE = os.path.join(SKILL_DIR, "council_config.json")
 CACHE_DIR = os.path.join(SKILL_DIR, "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def _get_reasonix_home() -> str:
+    """获取 Reasonix 数据根目录（兼容 v0.53 和 1.X）"""
+    # 1.X: REASONIX_HOME 环境变量
+    rx_home = os.environ.get("REASONIX_HOME", "").strip()
+    if rx_home:
+        return rx_home
+    # 1.X Windows: %APPDATA%/reasonix
+    appdata = os.environ.get("APPDATA", "").strip()
+    if appdata:
+        path = os.path.join(appdata, "reasonix")
+        if os.path.isdir(path):
+            return path
+    # 1.X macOS/Linux: ~/.reasonix
+    home = os.path.expanduser("~")
+    path = os.path.join(home, ".reasonix")
+    if os.path.isdir(path):
+        return path
+    # v0.53: {script_dir}/../../  (skill dir 在 .reasonix/skills/ 下)
+    legacy = os.path.dirname(os.path.dirname(SKILL_DIR))
+    if os.path.isdir(os.path.join(legacy, "sessions")):
+        return legacy
+    return ""
+
+
+def _detect_sessions_dir() -> str:
+    """自动检测 sessions 目录"""
+    home = _get_reasonix_home()
+    if home:
+        path = os.path.join(home, "sessions")
+        if os.path.isdir(path):
+            return path
+    # 最后兜底：v0.53 相对路径
+    fallback = os.path.join(os.path.dirname(os.path.dirname(SKILL_DIR)), "sessions")
+    return fallback if os.path.isdir(fallback) else ""
+
+
+# 格式检测结果
+_FORMAT = None        # "v053" 或 "v1x"
+_META_EXT = None      # ".meta.json" 或 ".meta"
+_JSONL_EXTS = None    # [".jsonl"] 或 [".events.jsonl", ".jsonl"]
+
+
+def _detect_format(sessions_dir: str):
+    """检测会话存储格式：v053 用 .meta.json + .jsonl，1.X 用 .meta + .events.jsonl/.jsonl"""
+    global _FORMAT, _META_EXT, _JSONL_EXTS
+    if _FORMAT is not None:
+        return
+    # 先看有没有 1.X 的 .meta 文件（无 .json 后缀）
+    meta_files = glob.glob(os.path.join(sessions_dir, "*.meta"))
+    # 排除 .meta.json（那是 v0.53 的）
+    v1x_meta = [f for f in meta_files if not f.endswith(".meta.json")]
+    if v1x_meta:
+        _FORMAT = "v1x"
+        _META_EXT = ".meta"
+        _JSONL_EXTS = [".events.jsonl", ".jsonl"]
+        return
+    # 再看 v0.53 的 .meta.json
+    if glob.glob(os.path.join(sessions_dir, "*.meta.json")):
+        _FORMAT = "v053"
+        _META_EXT = ".meta.json"
+        _JSONL_EXTS = [".jsonl"]
+        return
+    # 都没找到：再试一次宽松匹配（可能目录刚初始化）
+    if glob.glob(os.path.join(sessions_dir, "*.jsonl")):
+        _FORMAT = "v053"
+        _META_EXT = ".meta.json"
+        _JSONL_EXTS = [".jsonl"]
+        return
+    # 默认假设 v0.53
+    _FORMAT = "v053"
+    _META_EXT = ".meta.json"
+    _JSONL_EXTS = [".jsonl"]
+
+
+# 初始化
+SESSIONS_DIR = _detect_sessions_dir()
+if SESSIONS_DIR:
+    _detect_format(SESSIONS_DIR)
+else:
+    _FORMAT = "v053"
+    _META_EXT = ".meta.json"
+    _JSONL_EXTS = [".jsonl"]
+
+
+def _session_id_from_filename(filename: str) -> str:
+    """从文件名提取 session ID（去掉扩展名）。兼容 v0.53 和 1.X 命名。"""
+    # v0.53: desktop-YYYYMMDDHHMM-N.jsonl → desktop-YYYYMMDDHHMM-N
+    # 1.X:   YYYYMMDD-HHMMSS-model.jsonl → YYYYMMDD-HHMMSS-model
+    #        或 desktop-YYYYMMDDHHMM-NNNNNN.events.jsonl
+    for ext in _JSONL_EXTS:
+        if filename.endswith(ext):
+            return filename[:-len(ext)]
+    # 兜底：去掉最后一个 . 之后的部分
+    if "." in filename:
+        return filename.rsplit(".", 1)[0]
+    return filename
+
+
+def _date_from_session_id(session_id: str) -> str:
+    """从 session ID 提取日期字符串 YYYYMMDD"""
+    # v0.53: desktop-20260630... → 提取 20260630
+    # 1.X:   20260630-123456-deepseek-chat → 提取 20260630
+    # 通用策略：找第一个 8 位连续数字
+    match = re.search(r'(\d{8})', session_id)
+    return match.group(1) if match else session_id[:8]
+
+
+def _find_jsonl_for_session(session_id: str) -> str:
+    """根据 session ID 查找对应的 JSONL 文件路径"""
+    for ext in _JSONL_EXTS:
+        path = os.path.join(SESSIONS_DIR, f"{session_id}{ext}")
+        if os.path.isfile(path):
+            return path
+    return ""
+
+
+def _read_meta(session_id: str) -> dict:
+    """读取会话元数据（兼容 v0.53 .meta.json 和 1.X .meta）"""
+    # 1.X 格式：.meta（BranchMeta JSON）
+    if _FORMAT == "v1x":
+        meta_path = os.path.join(SESSIONS_DIR, f"{session_id}.meta")
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+        # 也尝试 .meta.json（迁移后可能共存）
+        meta_path2 = os.path.join(SESSIONS_DIR, f"{session_id}.meta.json")
+        if os.path.isfile(meta_path2):
+            try:
+                with open(meta_path2, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+        return {}
+
+    # v0.53 格式：.meta.json
+    meta_path = os.path.join(SESSIONS_DIR, f"{session_id}.meta.json")
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+    return {}
 
 # LLM 配置
 LLM_URL = "https://api.deepseek.com/v1/chat/completions"
@@ -90,43 +237,60 @@ def parse_json_response(raw: str) -> dict:
 # 会话扫描
 # ============================================================
 def scan_sessions(recent: int = None) -> list[dict]:
-    """扫描 sessions 目录，返回有效会话列表（按日期倒序）"""
+    """扫描 sessions 目录，返回有效会话列表（按日期倒序）。自动兼容 v0.53 和 1.X。"""
+    if not SESSIONS_DIR:
+        return []
+
     sessions = []
+    seen = set()
 
-    for meta_path in glob.glob(os.path.join(SESSIONS_DIR, "desktop-*.meta.json")):
-        basename = os.path.basename(meta_path)
-        if "冲突" in basename:
-            continue
+    # 扫描所有 JSONL 文件
+    for ext in _JSONL_EXTS:
+        for jsonl_path in glob.glob(os.path.join(SESSIONS_DIR, f"*{ext}")):
+            basename = os.path.basename(jsonl_path)
+            # 跳过备份和冲突文件
+            if "冲突" in basename or ".bak" in basename:
+                continue
 
-        jsonl_path = meta_path.replace(".meta.json", ".jsonl")
-        if not os.path.exists(jsonl_path):
-            continue
+            session_id = _session_id_from_filename(basename)
+            if session_id in seen:
+                continue
+            seen.add(session_id)
 
-        # Skip backup files
-        if ".bak" in jsonl_path or "冲突" in jsonl_path:
-            continue
+            # 读取元数据
+            meta = _read_meta(session_id)
 
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            continue
+            date_str = _date_from_session_id(session_id)
+            size = os.path.getsize(jsonl_path)
+            try:
+                line_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8", errors="ignore"))
+            except (OSError, UnicodeDecodeError):
+                line_count = 0
 
-        session_id = os.path.basename(jsonl_path).replace(".jsonl", "")
-        date_str = session_id[8:16]  # desktop-YYYYMMDD-...
+            # 提取摘要提示（v0.53: meta.summary, 1.X: meta.Preview）
+            summary_hint = ""
+            if _FORMAT == "v1x":
+                summary_hint = meta.get("Preview", "")
+            else:
+                summary_hint = meta.get("summary", "")
 
-        size = os.path.getsize(jsonl_path)
-        line_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8", errors="ignore"))
+            # 提取成本（仅 v0.53 有）
+            total_cost_usd = meta.get("totalCostUsd", 0)
 
-        sessions.append({
-            "id": session_id,
-            "file": os.path.basename(jsonl_path),
-            "date": date_str,
-            "summary_hint": meta.get("summary", ""),
-            "total_cost_usd": meta.get("totalCostUsd", 0),
-            "size_kb": size // 1024,
-            "lines": line_count
-        })
+            # 提取轮数（1.X 的 Turns 字段）
+            turns = meta.get("Turns", line_count // 2)
+
+            sessions.append({
+                "id": session_id,
+                "file": basename,
+                "date": date_str,
+                "summary_hint": summary_hint,
+                "total_cost_usd": total_cost_usd,
+                "turns": turns,
+                "size_kb": size // 1024,
+                "lines": line_count,
+                "format": _FORMAT
+            })
 
     sessions.sort(key=lambda s: s["date"], reverse=True)
 
@@ -137,9 +301,20 @@ def scan_sessions(recent: int = None) -> list[dict]:
 
 
 def read_session_messages(session_file: str, max_messages: int = 200) -> list[dict]:
-    """读取会话的 JSONL 文件，返回最近的消息列表"""
-    jsonl_path = os.path.join(SESSIONS_DIR, session_file)
-    if not os.path.exists(jsonl_path):
+    """读取会话的 JSONL 文件，返回最近的消息列表。
+    session_file 可以是文件名或完整路径。"""
+    # 支持直接传文件名或完整路径
+    if os.path.isabs(session_file):
+        jsonl_path = session_file
+    else:
+        # 尝试在 SESSIONS_DIR 下查找
+        found = _find_jsonl_for_session(session_file.replace(".jsonl", "").replace(".events.jsonl", ""))
+        if found:
+            jsonl_path = found
+        else:
+            jsonl_path = os.path.join(SESSIONS_DIR, session_file)
+
+    if not os.path.isfile(jsonl_path):
         return []
 
     messages = []
@@ -199,15 +374,15 @@ def extract_summary(session_id: str, force: bool = False) -> dict:
     cache_key = hashlib.md5(session_id.encode()).hexdigest()[:12]
     cache_path = os.path.join(CACHE_DIR, f"{cache_key}.json")
 
+    # Find the session file for cache validation
+    jsonl_path = _find_jsonl_for_session(session_id)
+
     # Check cache
     if not force and os.path.exists(cache_path):
         try:
             with open(cache_path, "r", encoding="utf-8") as f:
                 cached = json.load(f)
-            # Check if session file has been modified since cache
-            session_file = f"{session_id}.jsonl"
-            jsonl_path = os.path.join(SESSIONS_DIR, session_file)
-            if os.path.exists(jsonl_path):
+            if jsonl_path and os.path.exists(jsonl_path):
                 mtime = os.path.getmtime(jsonl_path)
                 if cached.get("_cached_mtime", 0) >= mtime:
                     return cached
@@ -215,8 +390,7 @@ def extract_summary(session_id: str, force: bool = False) -> dict:
             pass
 
     # Read session messages
-    session_file = f"{session_id}.jsonl"
-    messages = read_session_messages(session_file)
+    messages = read_session_messages(session_id)
 
     if not messages:
         return {"error": "no_messages", "session_id": session_id}
@@ -237,9 +411,9 @@ def extract_summary(session_id: str, force: bool = False) -> dict:
     summary["extracted_at"] = datetime.now().isoformat()
 
     # Cache it
-    session_file_path = os.path.join(SESSIONS_DIR, session_file)
-    if os.path.exists(session_file_path):
-        summary["_cached_mtime"] = os.path.getmtime(session_file_path)
+    jsonl_path = _find_jsonl_for_session(session_id)
+    if jsonl_path and os.path.exists(jsonl_path):
+        summary["_cached_mtime"] = os.path.getmtime(jsonl_path)
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
@@ -281,7 +455,7 @@ def init_council(session_ids: list[str], nicknames: dict[str, str] = None):
         member = {
             "id": sid,
             "nickname": nicknames.get(sid, summary.get("domain", sid[:24])),
-            "session_file": f"{sid}.jsonl",
+            "session_file": f"{sid}{_JSONL_EXTS[0]}",
             "summary": summary,
             "added_at": datetime.now().isoformat()
         }
@@ -310,7 +484,7 @@ def add_member(session_id: str, nickname: str = None):
     member = {
         "id": session_id,
         "nickname": nickname or summary.get("domain", session_id[:24]),
-        "session_file": f"{session_id}.jsonl",
+        "session_file": f"{session_id}{_JSONL_EXTS[0]}",
         "summary": summary,
         "added_at": datetime.now().isoformat()
     }
