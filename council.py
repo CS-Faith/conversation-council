@@ -105,6 +105,49 @@ def _detect_format(sessions_dir: str):
     _JSONL_EXTS = [".jsonl"]
 
 
+# ============================================================
+# Codex 检测
+# ============================================================
+_CODEX_HOME = None
+_CODEX_AVAILABLE = False
+
+
+def _get_codex_home() -> str:
+    """获取 Codex 数据根目录（兼容 PortaKit 环境变量劫持）"""
+    # 尝试多个可能的用户目录
+    candidates = []
+    # 1. 真实 Windows 用户目录
+    system_drive = os.environ.get("SystemDrive", "C:")
+    for username in ["chenshen", os.environ.get("USERNAME", "")]:
+        if username:
+            candidates.append(os.path.join(system_drive + os.sep, "Users", username, ".codex"))
+    # 2. expanduser（可能被 PortaKit 劫持）
+    candidates.append(os.path.join(os.path.expanduser("~"), ".codex"))
+    # 3. LOCALAPPDATA
+    local_appdata = os.environ.get("LOCALAPPDATA", "")
+    if local_appdata:
+        candidates.append(os.path.join(os.path.dirname(local_appdata), ".codex"))
+    # 4. 用 USERNAME 环境变量兜底
+    username = os.environ.get("USERNAME", "")
+    if username:
+        candidates.append(os.path.join(system_drive + os.sep, "Users", username, ".codex"))
+
+    for codex in candidates:
+        if os.path.isdir(codex) and os.path.isfile(os.path.join(codex, "session_index.jsonl")):
+            return codex
+    return ""
+
+
+def _detect_codex() -> bool:
+    """检测 Codex 会话是否可用"""
+    global _CODEX_HOME, _CODEX_AVAILABLE
+    _CODEX_HOME = _get_codex_home()
+    if _CODEX_HOME:
+        idx = os.path.join(_CODEX_HOME, "session_index.jsonl")
+        _CODEX_AVAILABLE = os.path.isfile(idx)
+    return _CODEX_AVAILABLE
+
+
 # 初始化
 SESSIONS_DIR = _detect_sessions_dir()
 if SESSIONS_DIR:
@@ -113,6 +156,9 @@ else:
     _FORMAT = "v053"
     _META_EXT = ".meta.json"
     _JSONL_EXTS = [".jsonl"]
+
+# Codex 检测（独立于 Reasonix）
+_detect_codex()
 
 
 def _session_id_from_filename(filename: str) -> str:
@@ -145,6 +191,237 @@ def _find_jsonl_for_session(session_id: str) -> str:
         if os.path.isfile(path):
             return path
     return ""
+
+
+# ============================================================
+# Codex 会话扫描
+# ============================================================
+
+def _scan_codex_sessions() -> list[dict]:
+    """扫描 Codex 会话（session_index.jsonl + sessions/ + archived_sessions/）"""
+    if not _CODEX_AVAILABLE:
+        return []
+
+    sessions = []
+    seen = set()
+
+    # 读索引
+    index = {}
+    idx_path = os.path.join(_CODEX_HOME, "session_index.jsonl")
+    try:
+        for line in open(idx_path, "r", encoding="utf-8", errors="ignore"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                index[obj["id"]] = obj
+            except json.JSONDecodeError:
+                continue
+    except OSError:
+        pass
+
+    # 扫描活跃会话（sessions/YYYY/MM/DD/）
+    sessions_dir = os.path.join(_CODEX_HOME, "sessions")
+    if os.path.isdir(sessions_dir):
+        for jsonl_path in glob.glob(os.path.join(sessions_dir, "**", "rollout-*.jsonl"), recursive=True):
+            basename = os.path.basename(jsonl_path)
+            if "_backup" in jsonl_path or "_backup" in basename:
+                continue
+
+            # 从文件名提取 UUID（时间戳5段 + UUID 5段 = 至少10段）
+            raw = basename.replace("rollout-", "").replace(".jsonl", "")
+            parts = raw.split("-")
+            uuid = "-".join(parts[5:]) if len(parts) >= 10 else raw
+
+            if uuid in seen:
+                continue
+            seen.add(uuid)
+
+            idx_entry = index.get(uuid, {})
+            thread_name = idx_entry.get("thread_name", "")
+            updated_at = idx_entry.get("updated_at", "")
+
+            # 提取日期（从文件名或索引）
+            date_str = ""
+            if updated_at:
+                date_str = updated_at[:10].replace("-", "")
+            elif len(parts) >= 3:
+                date_str = parts[0] + parts[1] + parts[2][:2]  # YYYY + MM + DD
+            else:
+                date_str = basename[:8]
+
+            size = os.path.getsize(jsonl_path)
+            turns = 0
+            try:
+                line_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8", errors="ignore"))
+                # 估算轮数：user_message 出现次数
+                for l in open(jsonl_path, "r", encoding="utf-8", errors="ignore"):
+                    if '"user_message"' in l:
+                        turns += 1
+            except (OSError, UnicodeDecodeError):
+                line_count = 0
+
+            sessions.append({
+                "id": uuid,
+                "file": basename,
+                "date": date_str,
+                "summary_hint": thread_name,
+                "total_cost_usd": 0,
+                "turns": turns,
+                "size_kb": size // 1024,
+                "lines": line_count,
+                "format": "codex",
+                "source": "codex"
+            })
+
+    # 扫描归档会话（扁平目录）
+    archived_dir = os.path.join(_CODEX_HOME, "archived_sessions")
+    if os.path.isdir(archived_dir):
+        for jsonl_path in glob.glob(os.path.join(archived_dir, "rollout-*.jsonl")):
+            basename = os.path.basename(jsonl_path)
+            raw = basename.replace("rollout-", "").replace(".jsonl", "")
+            parts = raw.split("-")
+            uuid = "-".join(parts[5:]) if len(parts) >= 10 else raw
+
+            if uuid in seen:
+                continue
+            seen.add(uuid)
+
+            idx_entry = index.get(uuid, {})
+            thread_name = idx_entry.get("thread_name", "[Archived] " + basename[:40])
+
+            date_str = ""
+            if len(parts) >= 3:
+                date_str = parts[0] + parts[1] + parts[2][:2]
+            else:
+                date_str = basename[:8]
+
+            size = os.path.getsize(jsonl_path)
+            line_count = 0
+            try:
+                line_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8", errors="ignore"))
+            except OSError:
+                pass
+
+            sessions.append({
+                "id": uuid,
+                "file": "archived/" + basename,
+                "date": date_str,
+                "summary_hint": thread_name,
+                "total_cost_usd": 0,
+                "turns": 0,
+                "size_kb": size // 1024,
+                "lines": line_count,
+                "format": "codex",
+                "source": "codex",
+                "archived": True
+            })
+
+    return sessions
+
+
+def _find_codex_jsonl(session_id: str) -> str:
+    """根据 Codex UUID 查找 JSONL 文件路径"""
+    if not _CODEX_AVAILABLE:
+        return ""
+    # 先搜活跃目录
+    sessions_dir = os.path.join(_CODEX_HOME, "sessions")
+    if os.path.isdir(sessions_dir):
+        for jsonl in glob.glob(os.path.join(sessions_dir, "**", "*.jsonl"), recursive=True):
+            if session_id in jsonl and "_backup" not in jsonl:
+                return jsonl
+    # 再搜归档
+    archived_dir = os.path.join(_CODEX_HOME, "archived_sessions")
+    if os.path.isdir(archived_dir):
+        for jsonl in glob.glob(os.path.join(archived_dir, "*.jsonl")):
+            if session_id in jsonl:
+                return jsonl
+    return ""
+
+
+def _read_codex_messages(session_id: str, max_messages: int = 200) -> list[dict]:
+    """读取 Codex 会话 JSONL，解包为标准 {role, content} 格式"""
+    jsonl_path = _find_codex_jsonl(session_id)
+    if not jsonl_path:
+        return []
+
+    messages = []
+    for line in open(jsonl_path, "r", encoding="utf-8", errors="ignore"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        # Codex 消息格式：顶层 type + payload
+        outer_type = obj.get("type", "")
+        payload = obj.get("payload", {})
+        inner_type = payload.get("type", "")
+
+        role = None
+        content = ""
+
+        if outer_type == "session_meta":
+            continue  # 跳过元数据行
+
+        if inner_type == "user_message":
+            role = "user"
+            # 内容可能在 message.content 或 content 字段
+            msg = payload.get("message", {})
+            if isinstance(msg, dict):
+                content = msg.get("content", "")
+            else:
+                content = payload.get("content", str(msg))
+
+        elif inner_type == "agent_message":
+            role = "assistant"
+            content = payload.get("content", payload.get("text", ""))
+
+        elif inner_type == "agent_reasoning":
+            role = "assistant"
+            content = payload.get("content", payload.get("text", ""))
+            # 标注为推理内容
+            if content:
+                content = f"[思考] {content}"
+
+        elif inner_type in ("function_call", "custom_tool_call", "tool_search_call"):
+            role = "assistant"
+            fn_name = payload.get("name", payload.get("function_name", "?"))
+            content = f"[调用工具: {fn_name}]"
+
+        elif inner_type in ("function_call_output", "custom_tool_call_output", "tool_search_output"):
+            role = "tool"
+            output = payload.get("output", payload.get("content", ""))
+            if isinstance(output, str):
+                content = output[:300]
+            elif isinstance(output, list):
+                content = str(output)[:300]
+            else:
+                content = str(output)[:300]
+
+        elif inner_type in ("task_started", "task_complete", "token_count",
+                            "web_search_call", "web_search_end", "mcp_tool_call_end",
+                            "patch_apply_end", "turn_aborted"):
+            continue  # 跳过事件/元数据
+
+        elif outer_type in ("event_msg", "turn_context", "response_item"):
+            continue  # 跳过框架事件
+
+        else:
+            # 未知类型，尝试提取文本
+            role = "assistant" if inner_type else "?" 
+            content = payload.get("content", payload.get("text", ""))[:300]
+
+        if role and content:
+            messages.append({"role": role, "content": content[:500]})
+
+    if len(messages) > max_messages:
+        messages = messages[-max_messages:]
+
+    return messages
 
 
 def _read_meta(session_id: str) -> dict:
@@ -237,60 +514,60 @@ def parse_json_response(raw: str) -> dict:
 # 会话扫描
 # ============================================================
 def scan_sessions(recent: int = None) -> list[dict]:
-    """扫描 sessions 目录，返回有效会话列表（按日期倒序）。自动兼容 v0.53 和 1.X。"""
-    if not SESSIONS_DIR:
-        return []
-
+    """扫描所有可用来源的会话（Reasonix + Codex），按日期倒序。"""
     sessions = []
     seen = set()
 
-    # 扫描所有 JSONL 文件
-    for ext in _JSONL_EXTS:
-        for jsonl_path in glob.glob(os.path.join(SESSIONS_DIR, f"*{ext}")):
-            basename = os.path.basename(jsonl_path)
-            # 跳过备份和冲突文件
-            if "冲突" in basename or ".bak" in basename:
-                continue
+    # --- Reasonix 会话 ---
+    if SESSIONS_DIR:
+        for ext in _JSONL_EXTS:
+            for jsonl_path in glob.glob(os.path.join(SESSIONS_DIR, f"*{ext}")):
+                basename = os.path.basename(jsonl_path)
+                if "冲突" in basename or ".bak" in basename:
+                    continue
 
-            session_id = _session_id_from_filename(basename)
-            if session_id in seen:
-                continue
-            seen.add(session_id)
+                session_id = _session_id_from_filename(basename)
+                if session_id in seen:
+                    continue
+                seen.add(session_id)
 
-            # 读取元数据
-            meta = _read_meta(session_id)
+                meta = _read_meta(session_id)
+                date_str = _date_from_session_id(session_id)
+                size = os.path.getsize(jsonl_path)
+                try:
+                    line_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8", errors="ignore"))
+                except (OSError, UnicodeDecodeError):
+                    line_count = 0
 
-            date_str = _date_from_session_id(session_id)
-            size = os.path.getsize(jsonl_path)
-            try:
-                line_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8", errors="ignore"))
-            except (OSError, UnicodeDecodeError):
-                line_count = 0
+                summary_hint = ""
+                if _FORMAT == "v1x":
+                    summary_hint = meta.get("Preview", "")
+                else:
+                    summary_hint = meta.get("summary", "")
 
-            # 提取摘要提示（v0.53: meta.summary, 1.X: meta.Preview）
-            summary_hint = ""
-            if _FORMAT == "v1x":
-                summary_hint = meta.get("Preview", "")
-            else:
-                summary_hint = meta.get("summary", "")
+                total_cost_usd = meta.get("totalCostUsd", 0)
+                turns = meta.get("Turns", line_count // 2)
 
-            # 提取成本（仅 v0.53 有）
-            total_cost_usd = meta.get("totalCostUsd", 0)
+                sessions.append({
+                    "id": session_id,
+                    "file": basename,
+                    "date": date_str,
+                    "summary_hint": summary_hint,
+                    "total_cost_usd": total_cost_usd,
+                    "turns": turns,
+                    "size_kb": size // 1024,
+                    "lines": line_count,
+                    "format": _FORMAT,
+                    "source": "reasonix"
+                })
 
-            # 提取轮数（1.X 的 Turns 字段）
-            turns = meta.get("Turns", line_count // 2)
-
-            sessions.append({
-                "id": session_id,
-                "file": basename,
-                "date": date_str,
-                "summary_hint": summary_hint,
-                "total_cost_usd": total_cost_usd,
-                "turns": turns,
-                "size_kb": size // 1024,
-                "lines": line_count,
-                "format": _FORMAT
-            })
+    # --- Codex 会话 ---
+    if _CODEX_AVAILABLE:
+        codex_sessions = _scan_codex_sessions()
+        for cs in codex_sessions:
+            if cs["id"] not in seen:
+                seen.add(cs["id"])
+                sessions.append(cs)
 
     sessions.sort(key=lambda s: s["date"], reverse=True)
 
@@ -302,19 +579,24 @@ def scan_sessions(recent: int = None) -> list[dict]:
 
 def read_session_messages(session_file: str, max_messages: int = 200) -> list[dict]:
     """读取会话的 JSONL 文件，返回最近的消息列表。
-    session_file 可以是文件名或完整路径。"""
-    # 支持直接传文件名或完整路径
+    session_file 可以是文件名、完整路径或 Codex UUID。"""
+    # 先尝试 Codex（UUID 格式）
+    if _CODEX_AVAILABLE and len(session_file) > 30 and "-" in session_file:
+        codex_msgs = _read_codex_messages(session_file, max_messages)
+        if codex_msgs:
+            return codex_msgs
+
+    # Reasonix 路径查找
     if os.path.isabs(session_file):
         jsonl_path = session_file
     else:
-        # 尝试在 SESSIONS_DIR 下查找
         found = _find_jsonl_for_session(session_file.replace(".jsonl", "").replace(".events.jsonl", ""))
         if found:
             jsonl_path = found
         else:
-            jsonl_path = os.path.join(SESSIONS_DIR, session_file)
+            jsonl_path = os.path.join(SESSIONS_DIR, session_file) if SESSIONS_DIR else ""
 
-    if not os.path.isfile(jsonl_path):
+    if not jsonl_path or not os.path.isfile(jsonl_path):
         return []
 
     messages = []
