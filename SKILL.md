@@ -2,6 +2,8 @@
 
 > 召集 Reasonix 历史会话作为「议员」，在新对话中以群聊形式参与讨论。每个议员以第一人称发言，基于其历史对话中积累的知识和立场。
 
+**兼容版本**: Reasonix v0.53 + v1.X（自动检测会话存储格式）
+
 ---
 
 ## 触发方式
@@ -149,9 +151,24 @@ Python 路径：`{rx_root}/python/python.exe`
 
 ---
 
+## 版本兼容
+
+council.py 启动时自动检测 Reasonix 版本和会话存储格式：
+
+| 检测项 | v0.53 | 1.X |
+|--------|-------|-----|
+| 数据根目录 | `{skill_dir}/../../`（.reasonix） | `%APPDATA%/reasonix/` 或 `$REASONIX_HOME` |
+| 会话文件扩展名 | `.jsonl` | `.events.jsonl` 或 `.jsonl` |
+| 元数据扩展名 | `.meta.json` | `.meta`（BranchMeta JSON） |
+| 摘要来源 | `meta.summary` | `meta.Preview` |
+| 日期提取 | 固定偏移 `session_id[8:16]` | 正则匹配 8 位连续数字 |
+
+无需用户手动指定版本——`scan` 命令自动识别目录中的文件格式并采用对应解析策略。
+
 ## 失败处理
 
 - council.py 执行失败 → 检查 Python 路径是否正确
 - DeepSeek API 超时/报错 → 重试一次，仍失败则告知用户 API 不可用
 - 议员数为 0 → 提示用户先运行 scan + init
 - JSON 解析失败 → 使用原始文本降级展示
+- 会话目录未找到 → 检查 `REASONIX_HOME` 环境变量或 `%APPDATA%/reasonix/sessions/` 是否存在
