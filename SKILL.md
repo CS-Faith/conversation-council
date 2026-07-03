@@ -2,7 +2,7 @@
 
 > 召集 Reasonix 历史会话作为「议员」，在新对话中以群聊形式参与讨论。每个议员以第一人称发言，基于其历史对话中积累的知识和立场。
 
-**兼容版本**: Reasonix v0.53 + v1.X（自动检测会话存储格式）
+**兼容版本**: Reasonix v0.53 + v1.X + Codex（自动检测会话存储格式）
 
 ---
 
@@ -162,6 +162,16 @@ council.py 启动时自动检测 Reasonix 版本和会话存储格式：
 | 元数据扩展名 | `.meta.json` | `.meta`（BranchMeta JSON） |
 | 摘要来源 | `meta.summary` | `meta.Preview` |
 | 日期提取 | 固定偏移 `session_id[8:16]` | 正则匹配 8 位连续数字 |
+
+### Codex 格式
+
+| 检测项 | 说明 |
+|--------|------|
+| 数据目录 | `~/.codex/`（自动探测，兼容 PortaKit 劫持） |
+| 会话索引 | `session_index.jsonl`（UUID → thread_name 映射） |
+| 会话文件 | `sessions/YYYY/MM/DD/rollout-*.jsonl` + `archived_sessions/*.jsonl` |
+| 消息格式 | 22 种 `type` 信封 → 自动映射为 `user`/`assistant`/`tool` |
+| 会话 ID | 完整 UUID（如 `019f2611-6a73-7123-bea0-e297b26710fa`） |
 
 无需用户手动指定版本——`scan` 命令自动识别目录中的文件格式并采用对应解析策略。
 
