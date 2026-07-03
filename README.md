@@ -74,9 +74,9 @@ Reasonix Session Files (.jsonl)
 
 ### Prerequisites
 
-- [Reasonix](https://github.com/CS-Faith/reasonix-portakit) v0.53 or v1.X (with session history)
-- Python 3.10+ (built into Reasonix v0.53 portable; must be installed separately for v1.X)
-- DeepSeek API key — set as `DEEPSEEK_API_KEY` environment variable
+- [Reasonix](https://github.com/CS-Faith/reasonix-portakit) (with session history)
+- Python 3.10+ (included in Reasonix portable)
+- DeepSeek API key (for LLM calls)
 
 ### Installation
 
@@ -142,28 +142,24 @@ With DeepSeek pricing (~¥0.001/1K tokens), each council discussion costs **less
 
 ## 🔌 Compatibility
 
-**Supports Reasonix v0.53 and v1.X (Go rewrite)** with automatic format detection. The session scanner auto-detects the storage format on startup and applies the correct parsing strategy — no manual configuration needed.
+**Supports Reasonix v0.53 / v1.X (Go rewrite) / Codex** with automatic format detection — no manual configuration needed.
 
 ### v0.53 Format
-
 - Session files: `desktop-YYYYMMDDHHMM-N.jsonl`
-- Metadata: `desktop-YYYYMMDDHHMM-N.meta.json` (contains `summary`, `totalCostUsd`, etc.)
-- Data directory: `{reasonix_home}/.reasonix/sessions/`
+- Metadata: `.meta.json` (contains `summary`, `totalCostUsd`)
 
 ### v1.X Format (Go Rewrite)
+- Session files: `*.jsonl` or `*.events.jsonl`
+- Metadata: `.meta` (BranchMeta JSON with `Preview`, `Turns`, `Scope`)
+- Honors `REASONIX_HOME` / `%APPDATA%`
 
-- Session files: `YYYYMMDD-HHMMSS-model.jsonl` or `*.events.jsonl`
-- Metadata: `*.meta` (BranchMeta JSON with `Preview`, `Turns`, `Scope`, etc.)
-- Data directory: `%APPDATA%/reasonix/sessions/` (Windows) or `~/.reasonix/sessions/` (macOS/Linux)
-- Honors `REASONIX_HOME` environment variable
+### Codex Format
+- Data directory: `~/.codex/` (PortaKit-aware auto-detection)
+- Session index: `session_index.jsonl` (UUID → `thread_name`)
+- Session files: `sessions/YYYY/MM/DD/rollout-*.jsonl` + `archived_sessions/*.jsonl`
+- 22 envelope `type` values auto-mapped to standard `{role, content}`
 
-### Auto-Detection
-
-The `scan` command inspects files in the sessions directory and determines the format by extension (`.meta` vs `.meta.json`). The user never needs to specify a version.
-
-### Format Assumptions
-
-The `read_session_messages()` adapter expects:
+### Shared JSONL Message Format
 
 ```jsonl
 {"role":"user","content":"..."}
@@ -171,23 +167,15 @@ The `read_session_messages()` adapter expects:
 {"role":"tool","tool_call_id":"...","content":"..."}
 ```
 
-- One JSON object per line (JSONL)
-- Standard `role` field: `user` / `assistant` / `tool`
-- Optional `tool_calls` array on assistant messages
-- Companion metadata file: `.meta.json` (v0.53) or `.meta` (v1.X) with summary/preview fields
-
 ### Extending to Other AI Agents
 
-The core architecture is **platform-agnostic** — the heavy lifting (summary extraction, member matching, spokesperson generation) works on any structured conversation data. To support a different agent platform, you only need to:
-
-1. **Write a format adapter** — a new `read_*_messages()` function that converts the platform's native session format into the common `[{role, content}]` message list
-2. **Provide session metadata** — a way to list sessions with timestamps and short summaries (like Reasonix's `.meta.json`)
-3. **The rest is unchanged** — `extract_summary()`, `match_members()`, `generate_spokesperson_response()`, and `run_council()` all operate on the normalized message format
+The core architecture is **platform-agnostic**. To support another platform, write a `read_*_messages()` adapter → the rest is unchanged.
 
 | Platform | Effort | What You Need |
 |----------|:--:|------|
-| Reasonix v0.53 | ✅ Built-in | Auto-detected, no extra work |
-| Reasonix v1.X (Go) | ✅ Built-in | Auto-detected, REASONIX_HOME + APPDATA aware |
+| Reasonix v0.53 | ✅ Built-in | Auto-detected |
+| Reasonix v1.X (Go) | ✅ Built-in | Auto-detected |
+| Codex | ✅ Built-in | Index + rollout JSONL auto-scan |
 | ChatGPT exports | Low | Parse `conversations.json` to extract `role` + `content` |
 | Claude exports | Low | Parse Claude's JSON export format |
 | LibreChat | Medium | Read conversation documents from MongoDB |
