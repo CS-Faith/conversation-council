@@ -1,0 +1,14 @@
+# 缓存目录（运行时生成）
+cache/
+
+# 用户配置（含个人会话数据）
+council_config.json
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 系统文件
+.DS_Store
+Thumbs.db
