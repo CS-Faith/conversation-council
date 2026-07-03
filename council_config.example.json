@@ -1,0 +1,13 @@
+# 对话议会 Skill — 示例配置
+
+# 将此文件复制为 council_config.json 后使用：
+#   cp council_config.example.json council_config.json
+
+# 真实配置由 council.py 的 `init` 命令自动填充。
+# 此文件仅作为格式参考提交到版本库。
+
+{
+  "version": 1,
+  "members": [],
+  "excluded_sessions": []
+}
