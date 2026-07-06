@@ -196,6 +196,14 @@ The core architecture is **platform-agnostic**. To support another platform, wri
 
 ---
 
+## Next step
+
+Managing your AI workspace across devices? → [Portakit](https://github.com/CS-Faith/reasonix-portakit)
+
+Decluttering your knowledge base? → [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup)
+
+---
+
 ## 🔗 Related Projects
 
 | Project | Description |
