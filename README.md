@@ -1,5 +1,7 @@
 # 🗣️ Conversation Council — Multi-Perspective AI Discussion
 
+> 历史 AI 会话中藏着大量未被利用的知识。Conversation Council 将这些历史会话转化为「AI 专家」小组，以第一人称视角参与新讨论 —— 让你的历史会话终于能「开口说话」。
+
 > **Your past AI conversations contain answers you're not using.** Conversation Council turns your historical sessions into a panel of AI "experts" who advise you in first-person — so your history finally speaks back.
 
 > Turn your Reasonix chat history into a panel of AI experts. Each past conversation becomes a "council member" that speaks in first-person, bringing its accumulated knowledge and stance to your current discussion.
