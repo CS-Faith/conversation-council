@@ -1,10 +1,8 @@
-# 🗣️ Conversation Council — Multi-Perspective AI Discussion
+# 🗣️ Conversation Council — 多视角 AI 讨论
 
 > 历史 AI 会话中藏着大量未被利用的知识。Conversation Council 将这些历史会话转化为「AI 专家」小组，以第一人称视角参与新讨论 —— 让你的历史会话终于能「开口说话」。
 
 > **Your past AI conversations contain answers you're not using.** Conversation Council turns your historical sessions into a panel of AI "experts" who advise you in first-person — so your history finally speaks back.
-
-> Turn your Reasonix chat history into a panel of AI experts. Each past conversation becomes a "council member" that speaks in first-person, bringing its accumulated knowledge and stance to your current discussion.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
@@ -12,214 +10,138 @@
 
 ---
 
-## 🎯 The Problem
+## 🎯 问题
 
-You have **139+ past AI conversations** spanning weeks of work — each one contains valuable context, decisions, and domain knowledge. But when you start a new conversation, that knowledge is **trapped in silos**. You can manually copy-paste context, but that's tedious and incomplete.
+你有 **139+ 个历史 AI 会话**，跨越数周的工作。但新对话时，这些知识被锁在孤岛中。
 
-## 💡 The Solution
+## 💡 解决方案
 
-**Conversation Council** turns your chat history into an expert panel. When you ask a question, it:
+**Conversation Council** 将你的聊天历史转化为专家小组：
 
-1. **Scans** your Reasonix session history
-2. **Extracts** structured summaries from each conversation (domain, entities, decisions, stance)
-3. **Matches** which past conversations are relevant to your question
-4. **Generates** first-person responses from each relevant "council member"
-5. **Presents** them in a group-chat format with a coordinator
+1. **扫描**你的 Reasonix 会话历史
+2. **提取**每个会话的结构化摘要
+3. **匹配**哪些历史会话与你的问题相关
+4. **生成**每位相关「议员」的第一人称回复
+5. **以群聊格式**呈现
 
-```
-You: "Should we upgrade to Spring Boot 3.2?"
+## 🏗️ 架构
 
-【Council Coordinator】
-  I've convened 3 relevant council members...
+Reasonix 会话文件 (.jsonl)
+  → 会话扫描器 → 摘要提取器
+  → 议会配置 → 匹配引擎
+  → 发言人生成器 → 群聊格式输出
 
-**【Backend Migration Expert - 2026-06-24】**
-  I've been through this. javax→jakarta is the biggest pain point.
-  My system has 3 modules that need rewriting — plan for 5 person-days.
-  Let the 3.0 systems upgrade first as validation.
+## 🚀 快速开始
 
-**【LLM WIKI Pipeline - 2026-06-30】**
-  The real problem isn't code — it's documentation. All internal wiki
-  references with old package names will break. Run a batch scan first.
+### 前置条件
+- [Reasonix](https://github.com/CS-Faith/reasonix-portakit)（含会话历史）
+- Python 3.10+（Reasonix 便携版已包含）
+- DeepSeek API Key（用于 LLM 调用）
 
-**【Zentao PM - 2026-06-24】**
-  I can create tracking tickets in Zentao. Let me set up an iteration
-  to track upgrade progress across all systems.
-```
+### 安装
 
----
+git clone https://github.com/CS-Faith/conversation-council.git
+~/.reasonix/skills/conversation-council/
 
-## 🏗️ Architecture
+### 首次运行
 
-```
-Reasonix Session Files (.jsonl)
-        │
-        ▼
-  Session Scanner (139 sessions → ranked by recency)
-        │
-        ▼
-  Summary Extractor (DeepSeek LLM → structured persona per session)
-        │
-        ▼
-  Council Config (user selects which sessions become members)
-        │
-        ▼
-  Match Engine (LLM: which members are relevant to the question?)
-        │
-        ▼
-  Spokesperson Generator (LLM: each member responds in first-person)
-        │
-        ▼
-  Group-Chat Format (multi-agent-discuss style presentation)
-```
+在任意 Reasonix 会话中：/skill conversation-council
 
----
+可选择：编号（1,2,4,6）、关键词（"LLM WIKI"）、日期范围（"上周"）
 
-## 🚀 Quick Start
+### 日常使用
 
-### Prerequisites
+/skill conversation-council 问其中输入问题
 
-- [Reasonix](https://github.com/CS-Faith/reasonix-portakit) (with session history)
-- Python 3.10+ (included in Reasonix portable)
-- DeepSeek API key (for LLM calls)
+## 📋 CLI 命令
 
-### Installation
+- council.py scan --recent 20 — 列出最近会话
+- council.py init --sessions "id1,id2" — 选择议员
+- council.py speak "问题" — 运行讨论
+- council.py manage --list — 列出当前成员
+- council.py manage --add "id" / --remove "id" — 管理成员
+- council.py extract --force — 刷新所有摘要
 
-```bash
-# 1. Copy skill files to Reasonix skills directory
-cp -r conversation-council/ ~/.reasonix/skills/conversation-council/
+## 💰 成本
 
-# 2. Or clone directly
-git clone https://github.com/CS-Faith/reasonix-conversation-council.git \
-  ~/.reasonix/skills/conversation-council/
-```
+- 初始扫描（139 会话）：~5,000 tokens（一次性）
+- 每位议员摘要：~500 tokens（一次性，缓存）
+- 每次讨论：~3,000-5,000 tokens
 
-### First Run
+DeepSeek 定价下，每次讨论成本不到 0.01 元。
 
-In any Reasonix conversation:
+## 🔌 兼容性
 
-```
-/skill conversation-council
-```
+支持 Reasonix v0.53 / v1.X (Go 重写) / Codex — 自动检测格式，无需手动配置。
 
-The skill will scan your session history and ask which conversations to invite as council members. You can select by:
-- **Number**: `1, 2, 4, 6`
-- **Keyword**: "all about LLM WIKI"
-- **Date range**: "last week's conversations"
-- **Custom**: any combination
-
-### Daily Use
-
-After setup, anytime you want multi-perspective input:
-
-```
-/skill conversation-council
-Should we migrate from MySQL to PostgreSQL?
-```
-
----
-
-## 📋 CLI Commands
-
-```bash
-python council.py scan --recent 20        # List recent sessions
-python council.py init --sessions "id1,id2"  # Select council members
-python council.py speak "your question"   # Run a council discussion
-python council.py manage --list           # List current members
-python council.py manage --add "id"       # Add a member
-python council.py manage --remove "id"    # Remove a member
-python council.py extract --force         # Refresh all summaries
-```
-
----
-
-## 💰 Cost
-
-| Operation | Tokens | When |
-|-----------|--------|------|
-| Initial scan (139 sessions) | ~5,000 | One-time |
-| Summary extraction per member | ~500/member | One-time (cached) |
-| Each council discussion | ~3,000-5,000 | Per question |
-
-With DeepSeek pricing (~¥0.001/1K tokens), each council discussion costs **less than ¥0.005** — essentially free.
-
----
-
-## 🔌 Compatibility
-
-**Supports Reasonix v0.53 / v1.X (Go rewrite) / Codex** with automatic format detection — no manual configuration needed.
-
-### v0.53 Format
-- Session files: `desktop-YYYYMMDDHHMM-N.jsonl`
-- Metadata: `.meta.json` (contains `summary`, `totalCostUsd`)
-
-### v1.X Format (Go Rewrite)
-- Session files: `*.jsonl` or `*.events.jsonl`
-- Metadata: `.meta` (BranchMeta JSON with `Preview`, `Turns`, `Scope`)
-- Honors `REASONIX_HOME` / `%APPDATA%`
-
-### Codex Format
-- Data directory: `~/.codex/` (PortaKit-aware auto-detection)
-- Session index: `session_index.jsonl` (UUID → `thread_name`)
-- Session files: `sessions/YYYY/MM/DD/rollout-*.jsonl` + `archived_sessions/*.jsonl`
-- 22 envelope `type` values auto-mapped to standard `{role, content}`
-
-### Shared JSONL Message Format
-
-```jsonl
-{"role":"user","content":"..."}
-{"role":"assistant","content":"...","tool_calls":[...]}
-{"role":"tool","tool_call_id":"...","content":"..."}
-```
-
-### Extending to Other AI Agents
-
-The core architecture is **platform-agnostic**. To support another platform, write a `read_*_messages()` adapter → the rest is unchanged.
-
-| Platform | Effort | What You Need |
-|----------|:--:|------|
-| Reasonix v0.53 | ✅ Built-in | Auto-detected |
-| Reasonix v1.X (Go) | ✅ Built-in | Auto-detected |
-| Codex | ✅ Built-in | Index + rollout JSONL auto-scan |
-| ChatGPT exports | Low | Parse `conversations.json` to extract `role` + `content` |
-| Claude exports | Low | Parse Claude's JSON export format |
-| LibreChat | Medium | Read conversation documents from MongoDB |
-| Custom agent logs | Low | Any JSONL or JSON file with `role` + `content` fields |
-| Loop Agent threads | Medium | Read `threads/*.json` from the mesh engine |
-
-**The key insight**: once a conversation is reduced to a 500-character structured summary, its origin platform doesn't matter. The council only reads summaries, never raw logs.
-
----
-
-## 🧩 Integration
-
-- **Loop Agent (Conversation Mesh)**: Conversation Council can serve as the "master thread UI" — each council member corresponds to a mesh sub-thread
-- **multi-agent-discuss**: Council output follows the same `**【Role】**` + coordinator format
-- **engine.py**: Reuses `extract_summary()` prompts for structured persona extraction
+## 📜 许可证
+MIT © 2026 [CS-Faith](https://cs-faith.github.io)
 
 ---
 
 ## Next step
 
-Managing your AI workspace across devices? → [Portakit](https://github.com/CS-Faith/reasonix-portakit)
+管理跨设备 AI 工作区？ → [Portakit](https://github.com/CS-Faith/reasonix-portakit)
 
-Decluttering your knowledge base? → [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup)
+清理知识库重复？ → [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup)
 
----
+## 🔗 相关项目
 
-## 🔗 Related Projects
-
-| Project | Description |
-|---------|-------------|
-| [reasonix-portakit](https://github.com/CS-Faith/reasonix-portakit) | Reasonix portable toolkit |
-| [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup) | AI-powered file deduplication |
-| [llm-wiki-pipeline](https://github.com/CS-Faith/llm-wiki-pipeline) | End-to-end knowledge base pipeline |
+| 项目 | 描述 |
+|------|------|
+| [reasonix-portakit](https://github.com/CS-Faith/reasonix-portakit) | Reasonix 便携工具箱 |
+| [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup) | AI 驱动的知识库去重 |
+| [llm-wiki-pipeline](https://github.com/CS-Faith/llm-wiki-pipeline) | 端到端知识库构建 |
 
 ---
 
-## 📄 License
+# Conversation Council (English)
 
-MIT © 2026 [CS-Faith](https://cs-faith.github.io)
+> **Your past AI conversations contain answers you're not using.** Conversation Council turns your historical sessions into a panel of AI "experts" who advise you in first-person.
 
----
+## The Problem
 
-**Tags**: `reasonix` `ai-skill` `multi-agent` `conversation-history` `group-chat` `first-person-ai` `llm-orchestration` `knowledge-management` `deepseek`
+You have **139+ past AI conversations** spanning weeks of work — each contains valuable context, decisions, and domain knowledge. But when you start a new conversation, that knowledge is **trapped in silos**.
+
+## The Solution
+
+1. **Scan** your Reasonix session history
+2. **Extract** structured summaries from each conversation
+3. **Match** which past conversations are relevant
+4. **Generate** first-person responses from each "council member"
+5. **Present** in group-chat format
+
+## Architecture
+
+Reasonix Session Files → Session Scanner → Summary Extractor → Council Config → Match Engine → Spokesperson Generator → Group-Chat Output
+
+## Quick Start
+
+Prerequisites: Reasonix, Python 3.10+, DeepSeek API key
+
+git clone https://github.com/CS-Faith/conversation-council.git
+cp -r conversation-council/ ~/.reasonix/skills/conversation-council/
+
+In any Reasonix conversation: /skill conversation-council
+
+## CLI Commands
+
+- council.py scan --recent 20 — List recent sessions
+- council.py init --sessions "id1,id2" — Select members
+- council.py speak "question" — Run discussion
+- council.py manage --list / --add / --remove — Manage members
+- council.py extract --force — Refresh summaries
+
+## Cost
+
+- Initial scan: ~5,000 tokens (one-time)
+- Per member: ~500 tokens (one-time, cached)
+- Per discussion: ~3,000-5,000 tokens
+- At DeepSeek pricing: less than ¥0.01 per discussion
+
+## Compatibility
+
+Supports Reasonix v0.53 / v1.X (Go) / Codex — automatic format detection.
+
+## License
+MIT © 2026 CS-Faith
