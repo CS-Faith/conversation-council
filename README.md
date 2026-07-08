@@ -1,147 +1,106 @@
-# 🗣️ Conversation Council — 多视角 AI 讨论
+﻿# Conversation Council - 多视角 AI 讨论
 
-> 历史 AI 会话中藏着大量未被利用的知识。Conversation Council 将这些历史会话转化为「AI 专家」小组，以第一人称视角参与新讨论 —— 让你的历史会话终于能「开口说话」。
-
-> **Your past AI conversations contain answers you're not using.** Conversation Council turns your historical sessions into a panel of AI "experts" who advise you in first-person — so your history finally speaks back.
+> 你在 ChatGPT/Claude 里问过的问题，其实已经在三次不同的对话里回答过了——只是你自己忘了。
+> Conversation Council 把这些散落的答案变成一场「AI 圆桌」，让历史会话用**第一人称**开口说话——无需翻阅历史，直接获得一场由过去的自己（AI）主持的专家圆桌会。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
-[![Reasonix Skill](https://img.shields.io/badge/Reasonix-Skill-58a6ff)](https://github.com/CS-Faith/reasonix-portakit)
+[![Reasonix](https://img.shields.io/badge/Reasonix-Ecosystem-58a6ff)](https://github.com/CS-Faith/reasonix-ecosystem)
 
 ---
 
-## 🎯 问题
+## 一句话定位
 
-你有 **139+ 个历史 AI 会话**，跨越数周的工作。但新对话时，这些知识被锁在孤岛中。
+| 输入 | 输出 |
+|------|------|
+| 你的 AI 会话历史（Reasonix / Codex / Claude） | 多位「AI 议员」从各自角度回答当前问题 |
 
-## 💡 解决方案
+---
 
-**Conversation Council** 将你的聊天历史转化为专家小组：
+## 30 秒体验
 
-1. **扫描**你的 Reasonix 会话历史
-2. **提取**每个会话的结构化摘要
-3. **匹配**哪些历史会话与你的问题相关
-4. **生成**每位相关「议员」的第一人称回复
-5. **以群聊格式**呈现
+在 Reasonix 或支持 Skill 的 AI 环境中：
 
-## 🏗️ 架构
+```
+/skill conversation-council
+# → 自动扫描历史会话 → 匹配相关议题 → 生成多视角讨论
 
+/skill conversation-council "要不要把知识库从 Notion 迁到 Obsidian？"
+# → 多位议员各抒己见，群聊格式输出
+```
+
+---
+
+## 为什么不是「自己翻聊天记录」？
+
+- 数百个会话，每条平均数百行——你不可能全部记得
+- 跨会话的信息是**隐性连接**：Session 37 的决策会影响 Session 283 的结果
+- Council 帮你完成匹配、提取、生成，不需要你记住全部历史
+
+---
+
+## 架构
+
+```
 Reasonix 会话文件 (.jsonl)
   → 会话扫描器 → 摘要提取器
   → 议会配置 → 匹配引擎
   → 发言人生成器 → 群聊格式输出
+```
 
-## 🚀 快速开始
+---
 
-### 前置条件
-- [Reasonix](https://github.com/CS-Faith/reasonix-portakit)（含会话历史）
-- Python 3.10+（Reasonix 便携版已包含）
-- DeepSeek API Key（用于 LLM 调用）
+## CLI 命令
 
-### 安装
+- `council.py scan --recent 20` — 列出最近会话
+- `council.py init --sessions "id1,id2"` — 选择议员
+- `council.py speak "问题"` — 运行讨论
+- `council.py manage --list/--add/--remove` — 管理成员
+- `council.py extract --force` — 刷新所有摘要
 
-git clone https://github.com/CS-Faith/conversation-council.git
-~/.reasonix/skills/conversation-council/
+---
 
-### 首次运行
+## 效率对比
 
-在任意 Reasonix 会话中：/skill conversation-council
+| 方式 | 效果 |
+|------|------|
+| 翻 5 个历史会话找答案 | ~15 分钟，可能遗漏 |
+| 反复问同一个 AI | 得到相似答案（回声室） |
+| **Council 多视角讨论** | **~30 秒，多个角度碰撞** |
 
-可选择：编号（1,2,4,6）、关键词（"LLM WIKI"）、日期范围（"上周"）
+---
 
-### 日常使用
-
-/skill conversation-council 问其中输入问题
-
-## 📋 CLI 命令
-
-- council.py scan --recent 20 — 列出最近会话
-- council.py init --sessions "id1,id2" — 选择议员
-- council.py speak "问题" — 运行讨论
-- council.py manage --list — 列出当前成员
-- council.py manage --add "id" / --remove "id" — 管理成员
-- council.py extract --force — 刷新所有摘要
-
-## 💰 成本
-
-- 初始扫描（139 会话）：~5,000 tokens（一次性）
-- 每位议员摘要：~500 tokens（一次性，缓存）
-- 每次讨论：~3,000-5,000 tokens
-
-DeepSeek 定价下，每次讨论成本不到 0.01 元。
-
-## 🔌 兼容性
+## 兼容性
 
 支持 Reasonix v0.53 / v1.X (Go 重写) / Codex — 自动检测格式，无需手动配置。
 
-## 📜 许可证
-MIT © 2026 [CS-Faith](https://cs-faith.github.io)
-
 ---
 
-## Next step
+## Next Step
 
-管理跨设备 AI 工作区？ → [Portakit](https://github.com/CS-Faith/reasonix-portakit)
+讨论结束后想沉淀成知识文章 → [**Conversation Distiller**](https://github.com/CS-Faith/conversation-distiller)
 
-清理知识库重复？ → [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup)
+讨论前想先清理知识库重复 → [**knowledge-cleanup**](https://github.com/CS-Faith/knowledge-cleanup)
 
-## 🔗 相关项目
-
-| 项目 | 描述 |
-|------|------|
-| [reasonix-portakit](https://github.com/CS-Faith/reasonix-portakit) | Reasonix 便携工具箱 |
-| [knowledge-cleanup](https://github.com/CS-Faith/knowledge-cleanup) | AI 驱动的知识库去重 |
-| [llm-wiki-pipeline](https://github.com/CS-Faith/llm-wiki-pipeline) | 端到端知识库构建 |
+跨设备便携你的议员和数据 → [**Portakit**](https://github.com/CS-Faith/reasonix-portakit)
 
 ---
-
-# Conversation Council (English)
-
-> **Your past AI conversations contain answers you're not using.** Conversation Council turns your historical sessions into a panel of AI "experts" who advise you in first-person.
-
-## The Problem
-
-You have **139+ past AI conversations** spanning weeks of work — each contains valuable context, decisions, and domain knowledge. But when you start a new conversation, that knowledge is **trapped in silos**.
-
-## The Solution
-
-1. **Scan** your Reasonix session history
-2. **Extract** structured summaries from each conversation
-3. **Match** which past conversations are relevant
-4. **Generate** first-person responses from each "council member"
-5. **Present** in group-chat format
-
-## Architecture
-
-Reasonix Session Files → Session Scanner → Summary Extractor → Council Config → Match Engine → Spokesperson Generator → Group-Chat Output
-
-## Quick Start
-
-Prerequisites: Reasonix, Python 3.10+, DeepSeek API key
-
-git clone https://github.com/CS-Faith/conversation-council.git
-cp -r conversation-council/ ~/.reasonix/skills/conversation-council/
-
-In any Reasonix conversation: /skill conversation-council
-
-## CLI Commands
-
-- council.py scan --recent 20 — List recent sessions
-- council.py init --sessions "id1,id2" — Select members
-- council.py speak "question" — Run discussion
-- council.py manage --list / --add / --remove — Manage members
-- council.py extract --force — Refresh summaries
-
-## Cost
-
-- Initial scan: ~5,000 tokens (one-time)
-- Per member: ~500 tokens (one-time, cached)
-- Per discussion: ~3,000-5,000 tokens
-- At DeepSeek pricing: less than ¥0.01 per discussion
-
-## Compatibility
-
-Supports Reasonix v0.53 / v1.X (Go) / Codex — automatic format detection.
 
 ## License
-MIT © 2026 CS-Faith
+MIT © 2026 [CS-Faith](https://cs-faith.github.io)
+
+<details>
+<summary>English Version</summary>
+
+**Conversation Council** turns your historical AI sessions into a panel of AI "experts" who advise you in first-person — so your history finally speaks back.
+
+You have asked ChatGPT the same question three times across different sessions — and forgotten each answer. Council brings those answers back as a multi-perspective discussion.
+
+### Key Features
+- Automatic session scanning and summary extraction
+- Relevance matching across your entire conversation history
+- First-person responses from historical "council members"
+- Group-chat format output
+
+### Compatibility
+Reasonix v0.53 / v1.X (Go) / Codex — automatic format detection.
+</details>
