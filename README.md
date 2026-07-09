@@ -1,6 +1,6 @@
 ﻿# Conversation Council - 多视角 AI 讨论
 
-> 你在 ChatGPT/Claude 里问过的问题，其实已经在三次不同的对话里回答过了——只是你自己忘了。
+> 会顶嘴的聊天记录：历史AI会话，用第一人称当场回答你。
 > Conversation Council 把这些散落的答案变成一场「AI 圆桌」，让历史会话用**第一人称**开口说话——无需翻阅历史，直接获得一场由过去的自己（AI）主持的专家圆桌会。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -91,7 +91,7 @@ MIT © 2026 [CS-Faith](https://cs-faith.github.io)
 <details>
 <summary>English Version</summary>
 
-**Conversation Council** turns your historical AI sessions into a panel of AI "experts" who advise you in first-person — so your history finally speaks back.
+**Conversation Council** — Chat logs that talk back. Your past AI sessions answer you — in the first person.
 
 You have asked ChatGPT the same question three times across different sessions — and forgotten each answer. Council brings those answers back as a multi-perspective discussion.
 
